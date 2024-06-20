@@ -1,14 +1,14 @@
 // L3-eval.ts
 import { map } from "ramda";
-import { isCExp, isLetExp } from "./L3-ast";
+import { isCExp, ClassExp, isClassExp, isLetExp , isVarDecl } from "./L3-ast";
 import { BoolExp, CExp, Exp, IfExp, LitExp, NumExp,
          PrimOp, ProcExp, Program, StrExp, VarDecl } from "./L3-ast";
 import { isAppExp, isBoolExp, isDefineExp, isIfExp, isLitExp, isNumExp,
              isPrimOp, isProcExp, isStrExp, isVarRef } from "./L3-ast";
-import { makeBoolExp, makeLitExp, makeNumExp, makeProcExp, makeStrExp } from "./L3-ast";
+import { makeBoolExp, makeLitExp, makeNumExp, makeProcExp, makeStrExp, Binding } from "./L3-ast";
 import { parseL3Exp } from "./L3-ast";
 import { applyEnv, makeEmptyEnv, makeEnv, Env } from "./L3-env-sub";
-import { isClosure, makeClosure, Closure, Value } from "./L3-value";
+import { isClosure, makeClosure, Closure, Value, Class, isClass, makeClass, Object, isObject, makeObject} from "./L3-value";
 import { first, rest, isEmpty, List, isNonEmptyList } from '../shared/list';
 import { isBoolean, isNumber, isString } from "../shared/type-predicates";
 import { Result, makeOk, makeFailure, bind, mapResult, mapv } from "../shared/result";
@@ -36,11 +36,16 @@ const L3applicativeEval = (exp: CExp, env: Env): Result<Value> =>
                               exp.rands), 
                             (rands: Value[]) =>
                                 L3applyProcedure(rator, rands, env))) :
+    isClassExp(exp) ? evalClass(exp, env) :
     isLetExp(exp) ? makeFailure('"let" not supported (yet)') :
     makeFailure('Never');
 
 export const isTrueValue = (x: Value): boolean =>
     ! (x === false);
+
+const evalClass = (exp: ClassExp, env: Env): Result<Value> =>
+    makeOk(makeClass(exp.fields, exp.methods));
+   
 
 const evalIf = (exp: IfExp, env: Env): Result<Value> =>
     bind(L3applicativeEval(exp.test, env), (test: Value) => 
@@ -53,6 +58,8 @@ const evalProc = (exp: ProcExp, env: Env): Result<Closure> =>
 const L3applyProcedure = (proc: Value, args: Value[], env: Env): Result<Value> =>
     isPrimOp(proc) ? applyPrimitive(proc, args) :
     isClosure(proc) ? applyClosure(proc, args, env) :
+    isClass(proc) ? applyClass(proc, args, env):
+    isObject(proc) ? applyObject(proc, args, env) :
     makeFailure(`Bad procedure ${format(proc)}`);
 
 // Applications are computed by substituting computed
@@ -73,6 +80,16 @@ const applyClosure = (proc: Closure, args: Value[], env: Env): Result<Value> => 
     const litArgs : CExp[] = map(valueToLitExp, args);
     return evalSequence(substitute(body, vars, litArgs), env);
     //return evalSequence(substitute(proc.body, vars, litArgs), env);
+}
+
+const applyClass = (proc: Class, args: Value[], env: Env): Result<Value> =>
+    args.length !== proc.fields.length
+      ? makeFailure("Invalid number of fields")
+      : makeOk(makeObject(proc, args));
+
+const applyObject = (proc: Object, args: Value[], env: Env): Result<Value> => {
+    args.length !== proc.type.fields.length ? makeFailure("Invalid number of arguments") :
+    makeOk(makeObject(proc.type, args));
 }
 
 // Evaluate a sequence of expressions (in a program)
