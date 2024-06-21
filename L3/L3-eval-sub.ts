@@ -1,6 +1,6 @@
 // L3-eval.ts
 import { map ,zipWith} from "ramda";
-import { isCExp, ClassExp, isClassExp, isLetExp , isVarDecl, makeBinding } from "./L3-ast";
+import { isCExp, ClassExp, isClassExp, isLetExp, makeBinding } from "./L3-ast";
 import { BoolExp, CExp, Exp, IfExp, LitExp, NumExp,
          PrimOp, ProcExp, Program, StrExp, VarDecl } from "./L3-ast";
 import { isAppExp, isBoolExp, isDefineExp, isIfExp, isLitExp, isNumExp,
@@ -11,7 +11,7 @@ import { applyEnv, makeEmptyEnv, makeEnv, Env } from "./L3-env-sub";
 import { isClosure, makeClosure, Closure, Value, Class, isClass, makeClass, Object, isObject, makeObject, isSymbolSExp} from "./L3-value";
 import { first, rest, isEmpty, List, isNonEmptyList } from '../shared/list';
 import { isBoolean, isNumber, isString } from "../shared/type-predicates";
-import { Result, makeOk, makeFailure, bind, mapResult, mapv, isFailure } from "../shared/result";
+import { Result, makeOk, makeFailure, bind, mapResult, isFailure } from "../shared/result";
 import { renameExps, substitute } from "./substitute";
 import { applyPrimitive } from "./evalPrimitive";
 import { parse as p } from "../shared/parser";
@@ -94,29 +94,28 @@ const applyClass = (proc: Class, args: Value[], env: Env): Result<Value> => {
 };
 
 
-const applyObject = (object: Object, args: Value[], env: Env): Result<Value> => {
+const applyObject = (proc: Object, args: Value[], env: Env): Result<Value> => {
     if (!isNonEmptyList<Value>(args)) {
         return makeFailure("No method name was given");
     }
 
-    const methodNames = map((b: Binding) => b.var.var, object.methods);
+    const methodNames = map((b: Binding) => b.var.var, proc.methods);
     const selectedName = first(args);
     if(!isSymbolSExp(selectedName)){
-        return makeFailure(`Unrecognized method: ${selectedName}`);
+        return makeFailure(`Could not proccess the method`);
     }
-    const methodsNames = map((b: Binding) => b.var.var, object.methods);
     const index = methodNames.indexOf(selectedName.val);
     if(index === -1){
-        return makeFailure(`Unrecognized method: ${selectedName}`);
+        return makeFailure(`Could not proccess the method`);
     }
-    const selectedMethod = object.methods[index].val;
+    const selectedMethod = proc.methods[index].val;
     if(!isProcExp(selectedMethod) || selectedMethod.args.length !== args.length - 1){
-        return makeFailure(`Unrecognized method: ${selectedName}`);
+        return makeFailure(`Could not proccess the method`);
     }
     
     const closure = evalProc(selectedMethod, env);
     if(isFailure(closure) || !isClosure(closure.value)){
-        return makeFailure(`Unrecognized method: ${selectedName}`);
+        return makeFailure(`Could not proccess the method`);
     }
 
     return applyClosure(closure.value, rest(args), env);
