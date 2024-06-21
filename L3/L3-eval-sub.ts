@@ -1,6 +1,6 @@
 // L3-eval.ts
-import { map } from "ramda";
-import { isCExp, ClassExp, isClassExp, isLetExp , isVarDecl } from "./L3-ast";
+import { map ,zipWith} from "ramda";
+import { isCExp, ClassExp, isClassExp, isLetExp , isVarDecl, makeBinding } from "./L3-ast";
 import { BoolExp, CExp, Exp, IfExp, LitExp, NumExp,
          PrimOp, ProcExp, Program, StrExp, VarDecl } from "./L3-ast";
 import { isAppExp, isBoolExp, isDefineExp, isIfExp, isLitExp, isNumExp,
@@ -8,10 +8,10 @@ import { isAppExp, isBoolExp, isDefineExp, isIfExp, isLitExp, isNumExp,
 import { makeBoolExp, makeLitExp, makeNumExp, makeProcExp, makeStrExp, Binding } from "./L3-ast";
 import { parseL3Exp } from "./L3-ast";
 import { applyEnv, makeEmptyEnv, makeEnv, Env } from "./L3-env-sub";
-import { isClosure, makeClosure, Closure, Value, Class, isClass, makeClass, Object, isObject, makeObject} from "./L3-value";
+import { isClosure, makeClosure, Closure, Value, Class, isClass, makeClass, Object, isObject, makeObject, isSymbolSExp} from "./L3-value";
 import { first, rest, isEmpty, List, isNonEmptyList } from '../shared/list';
 import { isBoolean, isNumber, isString } from "../shared/type-predicates";
-import { Result, makeOk, makeFailure, bind, mapResult, mapv } from "../shared/result";
+import { Result, makeOk, makeFailure, bind, mapResult, mapv, isFailure } from "../shared/result";
 import { renameExps, substitute } from "./substitute";
 import { applyPrimitive } from "./evalPrimitive";
 import { parse as p } from "../shared/parser";
@@ -82,15 +82,45 @@ const applyClosure = (proc: Closure, args: Value[], env: Env): Result<Value> => 
     //return evalSequence(substitute(proc.body, vars, litArgs), env);
 }
 
-const applyClass = (proc: Class, args: Value[], env: Env): Result<Value> =>
-    args.length !== proc.fields.length
-      ? makeFailure("Invalid number of fields")
-      : makeOk(makeObject(proc, args));
+const applyClass = (proc: Class, args: Value[], env: Env): Result<Value> => {
+    const fields = map((f: VarDecl) => f.var, proc.fields);
+    const litArgs: CExp[] = map(valueToLitExp, args);
+    const methodsNames = map((b: Binding) => b.var.var, proc.methods);
+    const methods = map((b: Binding) => b.val, proc.methods);
+    const method_renamed = renameExps(methods);
+    const body = substitute(method_renamed, fields, litArgs);
 
-const applyObject = (proc: Object, args: Value[], env: Env): Result<Value> => {
-    args.length !== proc.type.fields.length ? makeFailure("Invalid number of arguments") :
-    makeOk(makeObject(proc.type, args));
-}
+    return makeOk(makeObject(zipWith(makeBinding, methodsNames,body)));
+};
+
+
+const applyObject = (object: Object, args: Value[], env: Env): Result<Value> => {
+    if (!isNonEmptyList<Value>(args)) {
+        return makeFailure("No method name was given");
+    }
+
+    const methodNames = map((b: Binding) => b.var.var, object.methods);
+    const selectedName = first(args);
+    if(!isSymbolSExp(selectedName)){
+        return makeFailure(`Unrecognized method: ${selectedName}`);
+    }
+    const methodsNames = map((b: Binding) => b.var.var, object.methods);
+    const index = methodNames.indexOf(selectedName.val);
+    if(index === -1){
+        return makeFailure(`Unrecognized method: ${selectedName}`);
+    }
+    const selectedMethod = object.methods[index].val;
+    if(!isProcExp(selectedMethod) || selectedMethod.args.length !== args.length - 1){
+        return makeFailure(`Unrecognized method: ${selectedName}`);
+    }
+    
+    const closure = evalProc(selectedMethod, env);
+    if(isFailure(closure) || !isClosure(closure.value)){
+        return makeFailure(`Unrecognized method: ${selectedName}`);
+    }
+
+    return applyClosure(closure.value, rest(args), env);
+};
 
 // Evaluate a sequence of expressions (in a program)
 export const evalSequence = (seq: List<Exp>, env: Env): Result<Value> =>

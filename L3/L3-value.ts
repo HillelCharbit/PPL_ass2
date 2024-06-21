@@ -1,7 +1,7 @@
 // ========================================================
 // Value type definition for L4
 
-import { isPrimOp, CExp, PrimOp, VarDecl, ClassExp, isClassExp, Binding } from './L3-ast';
+import { isPrimOp, CExp, PrimOp, VarDecl, ClassExp, isClassExp, Binding, ProcExp } from './L3-ast';
 import { Env, makeEmptyEnv } from './L3-env-env';
 import { append } from 'ramda';
 import { isArray, isNumber, isString } from '../shared/type-predicates';
@@ -53,27 +53,20 @@ export type Class = {
   export const isClass = (x: any): x is Class => x.tag === "Class";
 
   export type Object = {
-    tag: "Object";
-    type: Class;
-    args: Value[];
-    env: Env;
-  };
-  export const makeObject = (type: Class, args: Value[]): Object => ({
     tag: "Object",
-    type: type,
-    args: args,
-    env: makeEmptyEnv(),
-  });
-  export const makeObjectEnv = (
-    type: Class,
-    args: Value[],
+    methods: Binding[],
     env: Env
-  ): Object => ({
+};
+  export const makeObject = (methods: Binding[]): Object => ({
     tag: "Object",
-    type: type,
-    args: args,
-    env: env,
-  });
+    methods: methods,
+    env: makeEmptyEnv()
+});
+  export const makeObjectEnv = (methods: Binding[], env: Env): Object => ({
+    tag: "Object",
+    methods: methods,
+    env: makeEmptyEnv()
+});
   export const isObject = (x: any): x is Object => x.tag === "Object";
 
 // ========================================================
