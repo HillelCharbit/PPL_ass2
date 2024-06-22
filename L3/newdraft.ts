@@ -64,34 +64,29 @@ const applyClosure = (proc: Closure, args: Value[]): Result<Value> => {
     return evalSequence(proc.body, makeExtEnv(vars, args, proc.env));
 }
 
-const applyClass = (proc: Class, args: Value[]): Result<Value> => {
-    const vars = map((v: VarDecl) => v.var, proc.fields);
-    return args.length === proc.fields.length ?
-    makeOk(makeObjectEnv(proc.methods, makeExtEnv(map((f: VarDecl) => f.var, proc.fields), args, proc.env)))
-    : makeFailure("Invalid number of variables");
-}
+const applyClass = (proc: Class, args: Value[]): Result<Value> => 
+    !isNonEmptyList(args) ? makeFailure('cannot create object without fields') :
+    makeOk(makeObjectEnv(proc.methods, makeExtEnv(map((f: VarDecl) => f.var, proc.fields), args, proc.env)));
 
 const applyObject = (proc: Object, args: Value[]): Result<Value> => {
     if (!isNonEmptyList<Value>(args)) {
-        return makeFailure("No method name was given");
+        return makeFailure("No method name was given")
     }
 
-    const methodNames = map((b: Binding) => b.var.var, proc.methods);
-    const selectedName = first(args).toString();
-    if(!isSymbolSExp(selectedName)){
-        return makeFailure(`Could not proccess the method`);
+    if (!isSymbolSExp(args[0])) {
+        return makeFailure("first argument isn't method name")
     }
-    const index = methodNames.indexOf(selectedName.val);
-    if(index === -1){
-        return makeFailure(`Could not proccess the method`);
-    }
-    const selectedMethod = proc.methods[index].val;
-    if(!isProcExp(selectedMethod) || selectedMethod.args.length !== args.length - 1){
-        return makeFailure(`Could not proccess the method`);
-    }
+    
+    const selectedName = args[0].val;
+    const methodNames = map((b: Binding) => b.var.var , proc.methods);
 
-    return bind(applicativeEval(selectedMethod, proc.env), (v: Value) => applyProcedure(v, rest(args)));
-};
+    if(!methodNames.includes(selectedName)) {
+        return makeFailure(`Unrecognized method: ${selectedName}`)
+    }
+    const selectedMethod = proc.methods[methodNames.indexOf(selectedName)];
+
+    return bind(applicativeEval(selectedMethod.val, proc.env), (v: Value) => applyProcedure(v, rest(args)));
+}
 
 // Evaluate a sequence of expressions (in a program)
 export const evalSequence = (seq: Exp[], env: Env): Result<Value> =>
