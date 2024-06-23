@@ -65,7 +65,7 @@ export type Class = {
   export const makeObjectEnv = (methods: Binding[], env: Env): Object => ({
     tag: "Object",
     methods: methods,
-    env: makeEmptyEnv()
+    env: env
 });
   export const isObject = (x: any): x is Object => x.tag === "Object";
 
